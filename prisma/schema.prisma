@@ -1,0 +1,291 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  name          String?
+  bio           String?
+  location      String?
+  profilePhoto  String?
+  avatarColor   String?    @default("#10b981")
+  emailVerified DateTime?
+  password      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  petitions     Petition[]
+  signatures    Signature[]
+  posts         Post[]
+  likes         Like[]
+  comments      Comment[]
+  events        Event[]
+  attendees     EventAttendee[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Petition {
+  id                    String    @id @default(cuid())
+  title                 String
+  description           String    @db.Text
+  category              String    // infrastructure, environment, public safety, education, housing, transportation, civic rights, other
+  location              String
+  country               String
+  province              String?
+  targetOfficial        String
+  supporterGoal         Int
+  currentSignatures     Int       @default(0)
+  internationalSupport  Int       @default(0)
+  showInternational     Boolean   @default(true)
+  status                String    @default("gathering") // gathering, goal_reached, report_generated, approved, delivered
+  createdBy             String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organizer             User      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  signatures            Signature[]
+  comments              Comment[]
+  report                Report?
+  internationalBreakdown InternationalBreakdown[]
+
+  @@index([createdBy])
+  @@index([status])
+  @@index([country])
+  @@map("petitions")
+}
+
+model Signature {
+  id            String    @id @default(cuid())
+  petitionId    String
+  userId        String
+  name          String
+  location      String
+  country       String
+  comment       String?
+  isInternational Boolean  @default(false)
+  createdAt     DateTime  @default(now())
+
+  petition      Petition  @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([petitionId, userId])
+  @@index([petitionId])
+  @@map("signatures")
+}
+
+model InternationalBreakdown {
+  id          String    @id @default(cuid())
+  petitionId  String
+  country     String
+  supportCount Int     @default(0)
+
+  petition    Petition  @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+
+  @@unique([petitionId, country])
+  @@map("international_breakdown")
+}
+
+model Report {
+  id            String    @id @default(cuid())
+  petitionId    String    @unique
+  content       String    @db.Text
+  draftEmail    String    @db.Text
+  status        String    @default("draft") // draft, approved, sent
+  approvedAt    DateTime?
+  sentAt        DateTime?
+  recipientEmail String?
+  subject       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  petition      Petition  @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+  selectedComments SelectedComment[]
+
+  @@index([petitionId])
+  @@map("reports")
+}
+
+model SelectedComment {
+  id        String    @id @default(cuid())
+  reportId  String
+  commentId String
+  content   String    @db.Text
+
+  report    Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@map("selected_comments")
+}
+
+model Post {
+  id            String    @id @default(cuid())
+  content       String    @db.Text // max 280 chars
+  authorId      String
+  category      String?
+  location      String?
+  image         String?
+  video         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes         Like[]
+  comments      Comment[]
+  reposts       Repost[]
+
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("posts")
+}
+
+model Like {
+  id        String    @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime  @default(now())
+
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@map("likes")
+}
+
+model Comment {
+  id            String    @id @default(cuid())
+  content       String    @db.Text
+  authorId      String
+  postId        String?
+  petitionId    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post          Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  petition      Petition? @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([postId])
+  @@index([petitionId])
+  @@map("comments")
+}
+
+model Repost {
+  id        String    @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime  @default(now())
+
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@map("reposts")
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @db.Text
+  type        String    // protest, meeting, town_hall, community_gathering, workshop
+  location    String
+  country     String
+  province    String?
+  startDate   DateTime
+  endDate     DateTime
+  image       String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organizer   User      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  attendees   EventAttendee[]
+
+  @@index([createdBy])
+  @@index([startDate])
+  @@index([country])
+  @@map("events")
+}
+
+model EventAttendee {
+  id        String    @id @default(cuid())
+  eventId   String
+  userId    String
+  createdAt DateTime  @default(now())
+
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@map("event_attendees")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String    // goal_reached, petition_update, comment, event_reminder, new_signature
+  content   String    @db.Text
+  link      String?
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
